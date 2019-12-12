@@ -8,12 +8,14 @@ let
     dep_file=joinpath(dirname(@__DIR__), "deps", "deps.jl")
     dep_sample=joinpath(dirname(@__DIR__), "deps", "sample_deps.jl")
     if !isfile(dep_file)
-        cp(dep_sample,dep_file)
+        #cp(dep_sample,dep_file); include(dep_file)
         println("\n------------------------------------")
-        println("NOTICE: May need to modify '$dep_file' to setup building enviroment.")
+        println("NOTICE: Please copy '$dep_sample' as '$dep_file' and modify related settings to setup building enviroment.")
+        println("Run `MakeDL.test()` or `MakeDL.test_essential()` to check settings")
         println("------------------------------------\n")
+    else
+        include(dep_file)
     end
-    include(dep_file)
 end
 
 const Str = String
@@ -201,7 +203,7 @@ function cbuild(;
         defines::VStr=Str[],
         options::VStr=Str[],
         link_options::VStr=Str[],
-        export_names::VStr=Str[], #specify the exported symbols, not necessary for gcc 
+        export_names::VStr=Str[], #specify the exported symbols, not necessary for gcc/g++/clang 
         compiler::Str="", #can be g++,gcc,clang,cl,icl,nvcc. Linux default is g++; Windows default is cl
         vc_env::VStr=DEFAULT_VC_ENV,
         icl_env::VStr=DEFAULT_ICL_ENV,
@@ -304,7 +306,7 @@ function cbuild(;
     @assert all(isfile.(depend_files))
     @assert all(isdir.(include_path))
     @assert all(isdir.(lib_path))
-    opencv && @assert isdir(opencv_root)
+    opencv && @assert isdir(opencv_root) 
     matlab && @assert isdir(matlab_root)
     compiler=="cl" && @assert isfile(vc_env[1])
     compiler=="icl" && @assert isfile(icl_env[1])
