@@ -135,7 +135,10 @@ If value of `args` is a data type, then read the define from file;
 otherwrie, update the define to the new value if different to the old and return the old;
 return all the defines as a dict and a boolean to indicate if updated or not.
 
-For example, if t.cpp has `#define t 1`, then:
+# Examples
+
+If "t.cpp" has `#define t 1`, then:
+
 - `rw_define("t.cpp",t=Int64)` return `(Dict(:t=>1),false)`
 - `rw_define("t.cpp",t=2)` update t.cpp to `#define t 2` and return `(Dict(:t=>1),true)`  
 - `rw_define("t.cpp",t=2)` do nothing and return `(Dict(:t=>2),false)`
@@ -188,7 +191,7 @@ function rw_define(filename;args...)
     return ret,dirty
 end
 
-#Main function to build C/C++ code or files
+#Main function for building C/C++ code or files
 function cbuild(;
         files::VStr=Str[], #input files. NOTICE: input file type is determined by its ext
         code::Str="", #if code is not empty, write code into a temp file and compile
@@ -749,6 +752,17 @@ macro dynamic(exp)
     end
 end
 
+"""
+    cfunc(func_name::Str,func_body::Str;args...)  -> func_handle, dll_handle
+
+Convert C/C++ code to callable handle by using `cbuild` to build C/C++ function to dll, using `dlopen` to load the dll, and using `dlsym` to get the function handle for using by `ccall`
+
+# Examples
+    
+    hfun,hdll = cfunc("foo",\"""extern "C" int foo() {return 1;}\""")
+    ccall(hfun,Cint,())
+    dlclose(hdll)
+"""
 function cfunc(func_name::Str,func_body::Str;args...)
     args=Dict{Symbol,Any}(args)
     if haskey(args,:export_names)
@@ -770,12 +784,33 @@ function cfunc(func_name::Str,func_body::Str;args...)
     return hfun,hdll
 end
 
-##NOTIC: Because this is a macro, the handle returned by cfunc will be opened at compile-time. So generally, the handle should not be closed in a normal function, otherwise the handle will be invalid when calling the function at the next time.
+"""
+    @CC_str(func_body,func_name) -> func_handle
+
+Convert C/C++ code to callable handle
+
+# Examples
+
+    hfun = CC\"""extern "C" int foo() {return 1;}\"""foo
+    ccall(hfun,Cint,())
+
+# NOTICE
+
+Because this is a macro, the dll handle returned by cfunc will be opened at compile-time. The dll handle will not be closed.
+"""
 macro CC_str(func_body,func_name)
-    return cfunc(func_name,func_body)
+    return cfunc(func_name,func_body)[1]
 end
 
-#for testing c/c++ code (compiler should not be gcc)
+"""
+    run_cc(code, return_type=Nothing; includes="", args...)
+
+Run piece of C++ code which can return a number. Normally for testing C/C++ code.
+
+# Examples
+
+    run_cc("return sin(1)",Float64)
+"""
 function run_cc(code, return_type=Nothing; includes="", args...)
     if includes==""
         includes=
@@ -796,6 +831,12 @@ function run_cc(code, return_type=Nothing; includes="", args...)
     else
         @error("unsupported output type")
     end
+    args=Dict(args)
+    if get(args,:compiler,"")=="gcc"
+        @warn "compiler gcc is changed to g++ to build C++ code"
+        args[:compiler]="g++"
+    end
+
     hfun,hdll=cfunc("__test_func__",
         """
         #include <stdint.h>
@@ -830,7 +871,15 @@ function run_cc(code, return_type=Nothing; includes="", args...)
     end
 end
 
-#for testing opencv code
+"""
+    run_opencv(code, return_type=Nothing; includes="", args...)
+
+Run piece of C++ code which can usine OpenCV and return a number. Normally for testing OpenCV code.
+
+# Examples
+
+    run_opencv("return Mat_<float>(Mat::eye(2,2,CV_32F))(1,1)",Float32)
+"""
 function run_opencv(code, return_type=Nothing; includes="", args...)
     run_cc(code,return_type;includes="#include <opencv2/opencv.hpp>\nusing namespace cv;\n"*includes,opencv=true,args...)
 end
@@ -872,7 +921,7 @@ function test()
     #test3
     let
         #use @eval to make the macro is lazily expanded. However, this makes __g_h_test__ be in global name space
-        @eval __g_h_test__,=CC"""
+        @eval __g_h_test__=CC"""
             extern "C" char* test(char* str)
             {
                 return str;
@@ -957,7 +1006,7 @@ function test()
         end
     end
 
-    nothing
+    @info "test MakeDL passed"
 end
 
 function test_rw_define()

@@ -23,6 +23,9 @@ Run `MakeDL.test()` or `MakeDL.test_essential()` to check if working
 - `cbuild("f1.cpp",opencv=true)` link with opencv (need to set `DEFAULT_OPENCV_ROOT` in `deps/deps.jl`)
 - `cbuild("f1.cpp",julia=true)` link with Julia for embeding Julia or building with PackageCompiler
 
+Check help for more functions: `cfunc,run_cc,run_opencv,@CC_str,rw_define,@dynamic` 
+
+Check code int `test()` for more usages.
 
 # Reference
 
