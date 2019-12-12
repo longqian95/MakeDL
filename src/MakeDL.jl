@@ -5,17 +5,35 @@ using Test,Libdl
 export cbuild,cbuild_exe,cfunc,run_cc,run_opencv,@CC_str,rw_define,@dynamic
 
 let
-    dep_file=joinpath(dirname(@__DIR__), "deps", "deps.jl")
-    dep_sample=joinpath(dirname(@__DIR__), "deps", "sample_deps.jl")
-    if !isfile(dep_file)
-        #cp(dep_sample,dep_file); include(dep_file)
-        println("\n------------------------------------")
-        println("NOTICE: Please copy '$dep_sample' as '$dep_file' and modify related settings to setup building environment.")
-        println("Run `MakeDL.test()` or `MakeDL.test_essential()` to check settings")
-        println("------------------------------------\n")
+    dep_file1=joinpath(dirname(@__DIR__), "deps", "MakeDL_settings.jl")
+    dep_file2=joinpath(dirname(dirname(@__DIR__)), "MakeDL_settings.jl")
+    dep_sample=joinpath(dirname(@__DIR__), "deps", "sample_settings.jl")
+    include_dependency(dep_file1)
+    include_dependency(dep_file2)
+    if isfile(dep_file1)
+        include(dep_file1)
+    elseif isfile(dep_file2)
+        include(dep_file2)
     else
-        include(dep_file)
+        __precompile__(false)
+        print("""
+
+            ------------------------------------
+            NOTICE:
+
+            Please copy '$dep_sample' to '$dep_file2' and modify related settings in the file to setup building environment.
+
+            Every setting should have value. If no information, set to ""
+
+            Run `MakeDL.test()` or `MakeDL.test_essential()` to check settings.
+            ------------------------------------
+            """)
     end
+end
+
+const PEXPORTS = joinpath(dirname(@__DIR__),"deps","pexports.exe")
+if !isfile(PEXPORTS)
+    #download("https://sourceforge.net/projects/mingw/files/MinGW/Extension/pexports/pexports-0.47/pexports-0.47-mingw32-bin.tar.xz")
 end
 
 const Str = String
@@ -888,6 +906,7 @@ end
 ###################################################################
 
 function test()
+    #Can use "dllexport" in source code or "exported_names" in cbuild to export symbols. Either way is OK for cl. Both are NOT necessary for gcc.
     dllexport = @static Sys.iswindows() ? "__declspec(dllexport)" : ""
     c_code = """extern "C" $dllexport double inc(double t){return t+1;}"""
 
@@ -951,7 +970,7 @@ function test()
             Libdl.dlclose(hdll)
         end
         test(cbuild(code=c_code,force=true,debug=true,crt_static=false,warn=false,fast_math=true,fatal_error=true))
-        test(cbuild(code=c_code,;force=true,debug=true,crt_static=true,warn=true,fast_math=true,fatal_error=false))
+        test(cbuild(code=c_code,force=true,debug=true,crt_static=true,warn=true,fast_math=true,fatal_error=false))
     end
 
     #test6, test exe file

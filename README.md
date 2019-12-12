@@ -6,7 +6,7 @@ This package simplify building C/C++ code in Julia.
 
 `]add https://github.com/longqian95/MakeDL.git`
 
-Modify `deps/deps.jl` to setup building environment.
+Copy `deps/sample_settings.jl` to `MakeDL/MakeDL_settings.jl` and modify related settings in the file to setup building environment.
 
 Run `MakeDL.test()` or `MakeDL.test_essential()` to check if working
 
@@ -17,10 +17,10 @@ Run `MakeDL.test()` or `MakeDL.test_essential()` to check if working
 - `cbuild_exe("/tmp/f1.cpp")` build "/tmp/f1.cpp" to exe and return "/tmp/f1" (or .exe in windows)
 - `cbuild(["f1.cpp","f2.cpp"])` build multiple files
 - `cbuild(code="int inc(int i) {return i+1;}",compiler="gcc")` build a piece of code and return the dll path
-- `cbuild("f1.cpp",libs=["x1","x2.lib","c:/x3.lib","c:/x4.dll"],compiler="cl")` link with x1.lib or libx1.lib or x1.dll or libx1.dll, x2.lib, c:/x3.lib, and the lib generated from c:/x4.dll. (need to install visual studio and set `DEFAULT_VC_ENV` in `deps/deps.jl`)
-- `cbuild("f1.cpp",matlab=true)` build mex file (need to set `DEFAULT_MATLAB_ROOT` in `deps/deps.jl`)
+- `cbuild("f1.cpp",libs=["x1","x2.lib","c:/x3.lib","c:/x4.dll"],compiler="cl")` link with x1.lib or libx1.lib or x1.dll or libx1.dll, x2.lib, c:/x3.lib, and the lib generated from c:/x4.dll. (need install Visual Studio and set `DEFAULT_VC_ENV`)
+- `cbuild("f1.cpp",matlab=true)` build mex file (need install MATLAB to set `DEFAULT_MATLAB_ROOT`)
 - `cbuild("f1.cu",compiler="nvcc")` build with CUDA (need to install CUDA)
-- `cbuild("f1.cpp",opencv=true)` link with OpenCV (need to set `DEFAULT_OPENCV_ROOT` in `deps/deps.jl`)
+- `cbuild("f1.cpp",opencv=true)` link with OpenCV (need install OpenCV and set `DEFAULT_OPENCV_ROOT`)
 - `cbuild("f1.cpp",julia=true)` link with Julia for embedding Julia or building with PackageCompiler
 
 Check help for more functions: `cfunc,run_cc,run_opencv,@CC_str,rw_define,@dynamic` 
