@@ -6,7 +6,7 @@ This package simplify building C/C++ code in Julia.
 
 `]add https://github.com/longqian95/MakeDL.git`
 
-Modify `deps/deps.jl` to setup building enviroment.
+Modify `deps/deps.jl` to setup building environment.
 
 Run `MakeDL.test()` or `MakeDL.test_essential()` to check if working
 
@@ -20,9 +20,12 @@ Run `MakeDL.test()` or `MakeDL.test_essential()` to check if working
 - `cbuild("f1.cpp",libs=["x1","x2.lib","c:/x3.lib","c:/x4.dll"],compiler="cl")` link with x1.lib or libx1.lib or x1.dll or libx1.dll, x2.lib, c:/x3.lib, and the lib generated from c:/x4.dll. (need to install visual studio and set `DEFAULT_VC_ENV` in `deps/deps.jl`)
 - `cbuild("f1.cpp",matlab=true)` build mex file (need to set `DEFAULT_MATLAB_ROOT` in `deps/deps.jl`)
 - `cbuild("f1.cu",compiler="nvcc")` build with CUDA (need to install CUDA)
-- `cbuild("f1.cpp",opencv=true)` link with opencv (need to set `DEFAULT_OPENCV_ROOT` in `deps/deps.jl`)
-- `cbuild("f1.cpp",julia=true)` link with Julia for embeding Julia or building with PackageCompiler
+- `cbuild("f1.cpp",opencv=true)` link with OpenCV (need to set `DEFAULT_OPENCV_ROOT` in `deps/deps.jl`)
+- `cbuild("f1.cpp",julia=true)` link with Julia for embedding Julia or building with PackageCompiler
 
+Check help for more functions: `cfunc,run_cc,run_opencv,@CC_str,rw_define,@dynamic` 
+
+Check code in `test()` for more usages.
 
 # Reference
 
@@ -37,7 +40,7 @@ function cbuild(;
         lib_path::VStr=Str[],
         lib_rpath::VStr=Str[], #only work for Linux
         rpath::Bool=false, #make all lib_path also in lib_rpath, only work for Linux
-        rpath_current::Bool=false, #add '${ORIGIN}' to rpath ($ORIGIN means output's own dir)
+        rpath_current::Bool=false, #add '${ORIGIN}' to rpath ($ORIGIN means the runtime dir containing the building target)
         defines::VStr=Str[],
         options::VStr=Str[],
         link_options::VStr=Str[],
@@ -45,16 +48,16 @@ function cbuild(;
         compiler::Str="", #can be g++,gcc,clang,cl,icl,nvcc. Linux default is g++; Windows default is cl
         vc_env::VStr=DEFAULT_VC_ENV,
         icl_env::VStr=DEFAULT_ICL_ENV,
-        julia::Bool=false, #build with julia
+        julia::Bool=false, #build with Julia
         cxxwrap::Bool=false, #build with CxxWrap.jl (not work for windows)
-        matlab::Bool=false, #build mex for matlab
+        matlab::Bool=false, #build mex for MATLAB
         matlab_root::Str=DEFAULT_MATLAB_ROOT,
-        matlab_gpu=false, #use mex gpu lib, nvcc comiler is necessary if true
-        opencv::Bool=false, #link to opencv
+        matlab_gpu=false, #use mex gpu lib, nvcc compiler is necessary if true
+        opencv::Bool=false, #link to OpenCV
         opencv_root::Str=DEFAULT_OPENCV_ROOT,
         opencv_libs::VStr=copy(DEFAULT_OPENCV_LIBS),
-        opencv_static::Bool=false, #static link to opencv, only work for Windows
-        opencv_rpath::Bool=true, #make opencv libs in rpath, only work for Linux
+        opencv_static::Bool=false, #static link to OpenCV, only work for Windows
+        opencv_rpath::Bool=true, #make OpenCV libs in rpath, only work for Linux
         openmp::Bool=false,
         fast_math::Bool=false,
         crt_static::Bool=false,
