@@ -442,7 +442,8 @@ function cbuild(;
             upush!(defines,"MATLAB_MEX_FILE")
             upush!(include_path,joinpath(matlab_root,"extern","include"))
             if matlab_gpu
-                upush!(include_path,joinpath(matlab_root,"toolbox","distcomp","gpu","extern","include"))
+                #upush!(include_path,joinpath(matlab_root,"toolbox","distcomp","gpu","extern","include"))
+                upush!(include_path,joinpath(matlab_root,"toolbox","parallel","gpu","extern","include"))
             end
 
             @static if Sys.iswindows() 
