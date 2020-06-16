@@ -1112,6 +1112,7 @@ function test_openmp()
 end
 
 function test_opencv()
+    run_opencv(raw"""printf("%s\n",CV_VERSION);""")
     @test run_opencv("Mat t=(Mat_<int>(2,2)<<1,2,3,4); return sum(t)[0];",Int)==10
     @test run_opencv("Mat t=(Mat_<int>(2,2)<<1,2,3,4); return sum(t)[0];",Int;opencv_static=true,opencv_rpath=false)==10
 
@@ -1145,7 +1146,7 @@ function test_opencv_gpu(;args...)
     if cv_ver<v"3"
         @test run_opencv("Mat s(2,2,CV_32F); randu(s,0,1); gpu::GpuMat d; d.upload(s); gpu::gemm(d,d,1,d,1,d); Mat t; d.download(t); gemm(s,s,1,s,1,s); double m; minMaxLoc(abs(s-t),NULL,&m); return m;",Float32;includes = "#include <opencv2/gpu/gpu.hpp>",opencv_libs=["gpu"])<1e-6
     else
-        @test run_opencv("Mat s(2,2,CV_32F); randu(s,0,1); cuda::GpuMat d; d.upload(s); cuda::gemm(d,d,1,d,1,d); Mat t; d.download(t); gemm(s,s,1,s,1,s); double m; minMaxLoc(abs(s-t),NULL,&m); return m;",Float32;includes = "#include <opencv2/core/cuda.hpp>",opencv_libs=["cudaarithm"])<1e-6
+        @test run_opencv("Mat s(2,2,CV_32F); randu(s,0,1); cuda::GpuMat d; d.upload(s); cuda::gemm(d,d,1,d,1,d); Mat t; d.download(t); gemm(s,s,1,s,1,s); double m; minMaxLoc(abs(s-t),NULL,&m); return m;",Float32;includes = "#include <opencv2/cudaarithm.hpp>",opencv_libs=["cudaarithm"])<1e-6
     end
     @info "test_opencv_gpu passed"
 end

@@ -14,9 +14,9 @@ end
     const DEFAULT_OPENCV_ROOT = raw"C:\opencv3.4.8\build\x64\vc15"
 else
     const DEFAULT_OPENCV_ROOT = success(`which opencv_version`) ? dirname(dirname(readchomp(`which opencv_version`))) : ""
-    #const DEFAULT_OPENCV_ROOT = "/opt/opencv2.4.13.5"
-    #const DEFAULT_OPENCV_ROOT = "/opt/opencv3.4.5"
-    #const DEFAULT_OPENCV_ROOT = "/opt/opencv4.0.1" #NOT work yet
+    #const DEFAULT_OPENCV_ROOT = "/opt/opencv2.4.13.7"
+    #const DEFAULT_OPENCV_ROOT = "/opt/opencv3.4.10"
+    #const DEFAULT_OPENCV_ROOT = "/opt/opencv4.3.0"
 end
 
 const DEFAULT_OPENCV_LIBS = ["world"]
