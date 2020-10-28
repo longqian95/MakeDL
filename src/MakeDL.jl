@@ -602,6 +602,8 @@ function cbuild(;
         elseif compiler=="cl" || compiler=="icl"
             env = compiler=="icl" ? icl_env : vc_env
 
+            upush!(defines,"_AMD64_")
+            
             upush!(options,
                 "/nologo",
                 "/Fo%temp%\\", #put object file into temp directory
