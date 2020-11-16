@@ -284,15 +284,15 @@ function cbuild(;
     end
 
     if (output_type=="ptx" || output_type=="cpp") && compiler!="nvcc"
-        @error("compiler should be nvcc")
+        @error("argument 'compiler' should be set to nvcc for output_type $output_type")
     end
 
     if matlab && output_type!="dll"
-        @error("output type souble be dll")
+        @error("argument 'output_type' souble be set to dll for matlab")
     end
 
     if matlab_gpu && compiler!="nvcc"
-        @error("matlab_gpu needs nvcc compiler")
+        @error("argument 'compiler' should be set to nvcc for matlab_gpu")
     end
 
     if code!=""
@@ -905,6 +905,10 @@ function run_opencv(code, return_type=Nothing; includes="", args...)
     run_cc(code,return_type;includes="#include <opencv2/opencv.hpp>\nusing namespace cv;\n"*includes,opencv=true,args...)
 end
 
+function show_opencv_version(;verbose=false)
+    verbose && run_opencv(raw"""printf("%s",getBuildInformation().c_str())""")
+    run_opencv(raw"""printf("CV_VERSION: %s\n",CV_VERSION);""")
+end
 
 ###################################################################
 
@@ -1114,7 +1118,7 @@ function test_openmp()
 end
 
 function test_opencv()
-    run_opencv(raw"""printf("%s\n",CV_VERSION);""")
+    show_opencv_version()
     @test run_opencv("Mat t=(Mat_<int>(2,2)<<1,2,3,4); return sum(t)[0];",Int)==10
     @test run_opencv("Mat t=(Mat_<int>(2,2)<<1,2,3,4); return sum(t)[0];",Int;opencv_static=true,opencv_rpath=false)==10
 
