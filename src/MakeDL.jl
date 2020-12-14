@@ -154,7 +154,11 @@ macro srpath(filepath)
 end
 @doc (@doc @srpath)
 macro srpath_str(filepath)
-    return :(@srpath $filepath)
+    #should not just `return :(@srpath $filepath)`, otherwise just related to this file
+    __source__.file === nothing && throw("Cannot find source-relative path")
+    _dirname = dirname(String(__source__.file::Symbol))
+    _dirname = isempty(_dirname) ? pwd() : abspath(_dirname)
+    return :(joinpath($_dirname, $filepath))    
 end
 
 # function get_define(str,def_name,def_type::DataType=Any)
