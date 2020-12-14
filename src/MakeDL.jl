@@ -2,7 +2,7 @@ module MakeDL
 
 using Test,Libdl
 
-export cbuild,cbuild_exe,cfunc,run_cc,run_opencv,@CC_str,rw_define,@dynamic
+export cbuild,cbuild_exe,cfunc,run_cc,run_opencv,@CC_str,rw_define,@dynamic,@srpath_str
 
 let
     dep_file1=joinpath(dirname(@__DIR__), "deps", "MakeDL_settings.jl")
@@ -135,6 +135,27 @@ function pkg_dir(name::Str)
     return id===nothing ? nothing : dirname(dirname(Base.locate_package(id)))
 end
 
+
+"""
+    @srpath(filepath)
+    srpath"filepath"
+
+Source-relative path. Equivalent to `joinpath(@__DIR__,filepath)`.
+
+This macro is just a simple modification to `@__DIR__`.
+
+Normally, if writing `MakeDL.cbuild("xxx.cpp")` in a script instead of REPL, it should use `MakeDL.cbuild(srpath"xxx.cpp")` to load `xxx.cpp` related to the script file instead of current working directory.
+"""
+macro srpath(filepath)
+    __source__.file === nothing && throw("Cannot find source-relative path")
+    _dirname = dirname(String(__source__.file::Symbol))
+    _dirname = isempty(_dirname) ? pwd() : abspath(_dirname)
+    return :(joinpath($_dirname, $filepath))
+end
+@doc (@doc @srpath)
+macro srpath_str(filepath)
+    return :(@srpath $filepath)
+end
 
 # function get_define(str,def_name,def_type::DataType=Any)
 #     m=match(Regex("^[ \\t]*#define[ \\t]+$def_name[ \\t]+(.*?)[ \\t]*(?:/[/\\*].*)?\$","m"),str).captures[1]
