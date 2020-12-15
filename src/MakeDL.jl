@@ -104,17 +104,17 @@ end
 #         if m!=nothing && m==2
 #             return VersionNumber(m,parse(Int,v[:CV_VERSION_MAJOR]),parse(Int,v[:CV_VERSION_MINOR]))
 #         else
-#             @error("Get opencv version error")
+#             error("Get opencv version error")
 #         end
 #     elseif haskey(v,:CV_VERSION_MAJOR)
 #         m=tryparse(Int,v[:CV_VERSION_MAJOR])
 #         if m!=nothing && m>=3
 #             return VersionNumber(m,parse(Int,v[:CV_VERSION_MINOR]),parse(Int,v[:CV_VERSION_REVISION]))
 #         else
-#             @error("Get opencv version error")
+#             error("Get opencv version error")
 #         end
 #     else
-#         @error("Get opencv version error")
+#         error("Get opencv version error")
 #     end
 # end
 
@@ -305,19 +305,19 @@ function cbuild(;
         end
         compiler=="" && (compiler="cl")
     else
-        @error("Unsupported OS")
+        error("Unsupported OS")
     end
 
     if (output_type=="ptx" || output_type=="cpp") && compiler!="nvcc"
-        @error("argument 'compiler' should be set to nvcc for output_type $output_type")
+        error("argument 'compiler' should be set to nvcc for output_type $output_type")
     end
 
     if matlab && output_type!="dll"
-        @error("argument 'output_type' souble be set to dll for matlab")
+        error("argument 'output_type' souble be set to dll for matlab")
     end
 
     if matlab_gpu && compiler!="nvcc"
-        @error("argument 'compiler' should be set to nvcc for matlab_gpu")
+        error("argument 'compiler' should be set to nvcc for matlab_gpu")
     end
 
     if code!=""
@@ -342,7 +342,7 @@ function cbuild(;
         _output=output
     end
     if isdir(_output)
-        @error("$_output already exists as a folder")
+        error("$_output already exists as a folder")
     end
     if _output in files
         error("output cannot be $_output")
@@ -445,7 +445,7 @@ function cbuild(;
         if cxxwrap
             cxxwrap_home=pkg_dir("CxxWrap")
             if cxxwrap_home==nothing
-                @error("CxxWrap is not installed")
+                error("CxxWrap is not installed")
             end
             jlcxx_home=joinpath(cxxwrap_home,"deps","usr")
             julia_home=dirname(Base.Sys.BINDIR)
@@ -455,7 +455,7 @@ function cbuild(;
             upush!(lib_path,joinpath(jlcxx_home,"lib"))
             @static if Sys.iswindows()
                 if compiler!="gcc" || compiler!="g++"
-                    @error("cxxwrap is not compatible with vc")
+                    error("cxxwrap is not compatible with vc")
                 end
                 upush!(libs,"libcxxwrap_julia.dll.a")
             else
@@ -508,7 +508,7 @@ function cbuild(;
                     end
                 end
                 if ext==".dll" && dir==""
-                    @error("$(libs[i]) is invalid")
+                    error("$(libs[i]) is invalid")
                 end
                 if ext=="" && dir=="" #emulate gcc style to add "lib" or ".lib" to name
                     for pre in ["","lib"], post in [".lib",".a",".dll.a",".dll"], p in lib_path
@@ -541,7 +541,7 @@ function cbuild(;
                         try
                             run_vc_cmd(vc_env,`dumpbin /exports $dllpath /out:$tmp.def`;show_cmd=false)
                         catch
-                            @error("erro when extracting symbols from $dllpath")
+                            error("erro when extracting symbols from $dllpath")
                         end
                     end
                     run_vc_cmd(vc_env,`lib /def:$tmp.def /machine:x64 /out:$tmp.lib`;show_cmd=false)
@@ -555,7 +555,7 @@ function cbuild(;
                         upush!(lib_path,dir)
                         libs[i]=base
                     else
-                        @error("$(libs[i]) is invalid")
+                        error("$(libs[i]) is invalid")
                     end
                 elseif ext != ""
                     if isfile(libs[i])
@@ -565,7 +565,7 @@ function cbuild(;
             else #gcc etc.
                 if ext=="" #normal libs
                     if dir != ""
-                        @error("$(libs[i]) is invalid")
+                        error("$(libs[i]) is invalid")
                     end
                 else #specify full lib name or full path
                     if dir != ""
@@ -573,7 +573,7 @@ function cbuild(;
                             upush!(lib_path,dir)
                             libs[i]=":"*base #enable full lib name
                         else
-                            @error("$(libs[i]) is invalid")
+                            error("$(libs[i]) is invalid")
                         end
                     else
                         if isfile(libs[i])
@@ -732,7 +732,7 @@ function cbuild(;
             end
 
         else
-            @error("Unsupported compiler")
+            error("Unsupported compiler")
         end
     end
 
@@ -775,7 +775,7 @@ macro dynamic(exp)
     if exp.head!=:call || exp.args[1]!=:ccall || typeof(exp.args[2])!=Expr || exp.args[2].head!=:tuple
         @show exp
         dump(exp)
-        @error("unsupported ccall expression")
+        error("unsupported ccall expression")
     end
     func=esc(exp.args[2].args[1])
     dl=esc(exp.args[2].args[2])
@@ -817,13 +817,13 @@ function cfunc(func_name::Str,func_body::Str;args...)
         args[:export_names]=[func_name]
     end
     if haskey(args,:code)
-        @error("should not specify code again")
+        error("should not specify code again")
     else
         args[:code]=func_body
     end
     dllfile=cbuild(;args...)
     if !isfile(dllfile)
-        @error("build failed for $dllfile")
+        error("build failed for $dllfile")
     end
     hdll = Libdl.dlopen(dllfile)
     hfun = Libdl.dlsym(hdll,func_name)
@@ -875,7 +875,7 @@ function run_cc(code, return_type=Nothing; includes="", args...)
     elseif  return_type==Float64
         return_type_str="double"
     else
-        @error("unsupported output type")
+        error("unsupported output type")
     end
     args=Dict(args)
     if get(args,:compiler,"")=="gcc"
@@ -1192,6 +1192,56 @@ function test_opencv_ocl(;args...)
     @info "test_opencv_ocl passed"
 end
 
+
+function matlab_engine()
+    @static if Sys.iswindows()
+        dlengine_file=joinpath(DEFAULT_MATLAB_ROOT,"bin","win64","libeng.dll")
+    else
+        dlengine_file=joinpath(DEFAULT_MATLAB_ROOT,"bin","glnxa64","libeng.so")
+    end
+    !isfile(dlengine_file) && error("MATLAB engine file '$dlengine_file' does not exist")
+    dlengine=dlopen(dlengine_file)
+    dlengine==C_NULL && error("Load MATLAB engine fail")
+    engine=ccall(dlsym(dlengine,"engOpen"),Ptr{Cvoid},(String,),"")
+    if engine==C_NULL
+        @static if Sys.iswindows()
+            error("Cannot start MATLAB engine, may need to register MATLAB as a COM server. see: https://www.mathworks.com/help/matlab/matlab_external/cant-start-matlab-engine.html")
+        else
+            error("Cannot start MATLAB engine, may need to install C shell csh at /bin/csh. see: https://www.mathworks.com/help/matlab/matlab_external/cant-start-matlab-engine.html")
+        end
+    end
+
+    engEvalString(str)=ccall(dlsym(dlengine,"engEvalString"),Cint,(Ptr{Cvoid},Ptr{UInt8}),engine,str)
+
+    engClose()=ccall(dlsym(dlengin,"engClose"),Cint,(Ptr{Cvoid},),engine)
+    
+    function engGetDoubles(name)
+        t=ccall(dlsym(dlengine,"engGetVariable"),Ptr{Cvoid},(Ptr{Cvoid},Ptr{UInt8}),engine,name)
+        t==C_NULL && error("Variable $name does not exist")
+        ccall(dlsym(dlengine,"mxIsDouble"),Bool,(Ptr{Cvoid},),t) || error("Variable $name is not double array")
+        ndims=ccall(dlsym(dlengin,"mxGetNumberOfDimensions"),Csize_t,(Ptr{Cvoid},),t)
+        psz=ccall(dlsym(dlengin,"mxGetDimensions"),Ptr{Csize_t},(Ptr{Cvoid},),t)
+        sz=unsafe_wrap(Array,psz,ndims)
+        pd=ccall(dlsym(dlengin,"mxGetPr"),Ptr{Float64},(Ptr{Cvoid},),t)
+        return copy(unsafe_wrap(Array,pd,(sz...,)))
+    end
+    
+    function engPutDoubles(name,d::Array{Float64})
+        mxDOUBLE_CLASS=6
+        mxREAL=0
+        sz=size(d)
+        t=ccall(dlsym(dlengine,"mxCreateNumericArray"),Ptr{Cvoid},(Csize_t,Ptr{Csize_t},Int,Int),length(sz),[sz...],mxDOUBLE_CLASS,mxREAL)
+        t==C_NULL && error("error when creating array in MATLAB")
+        pd=ccall(dlsym(dlengin,"mxGetPr"),Ptr{Float64},(Ptr{Cvoid},),t)
+        unsafe_copyto!(pd,pointer(d),length(d))
+        ccall(dlsym(dlengine,"engPutVariable"),Int,(Ptr{Cvoid},Ptr{UInt8},Ptr{Cvoid}),engine,name,t) == 0 || error("Error when putting $name to MATLAB")
+        return d
+    end
+
+    return (engEvalString=engEvalString,engClose=engClose,engGetDoubles=engGetDoubles,engPutDoubles=engPutDoubles)
+end
+
+
 function test_matlab()
     tmp=mktempdir()
     cppfile=joinpath(tmp,"test.cpp")
@@ -1200,18 +1250,14 @@ function test_matlab()
         void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
         {
             mexPrintf("hello\n");
+            plhs[0]=mxCreateDoubleScalar(3.14);
         }
         """)
     t=cbuild(cppfile,matlab=true)
-    @test isfile(t)
-    @static if Sys.iswindows()
-        dlengin=dlopen(joinpath(DEFAULT_MATLAB_ROOT,"bin","win64","libeng.dll"))
-    else
-        dlengin=dlopen(joinpath(DEFAULT_MATLAB_ROOT,"bin","glnxa64","libeng.so"))
-    end
-    engin=ccall(dlsym(dlengin,"engOpen"),Ptr{Cvoid},(String,),"")
-    @test ccall(dlsym(dlengin,"engEvalString"),Cint,(Ptr{Cvoid},Ptr{UInt8},),engin,"addpath $tmp;test")==0
-    ccall(dlsym(dlengin,"engClose"),Cint,(Ptr{Cvoid},),engin)
+    m=matlab_engine()
+    @test m.engEvalString("addpath $tmp;test")==0
+    @test m.engGetDoubles("ans")==reshape([3.14],1,1)
+    m.engClose()
     @info "test_matlab passed"
     return t #for testing in maltab
 end
@@ -1269,7 +1315,11 @@ function test_matlab_gpu()
         }
         """)
     t=cbuild(cufile,matlab=true,matlab_gpu=true,compiler="nvcc")
-    @test isfile(t)
+    m=matlab_engine()
+    m.engPutDoubles("a",Float64[1 2;3 4])
+    @test m.engEvalString("addpath $tmp;b=testgpu(a)")==0
+    @test m.engGetDoubles("b")==Float64[2 4;6 8]
+    m.engClose()
     @info "test_matlab_gpu passed"
     return t #for testing in maltab
 end
@@ -1455,7 +1505,7 @@ function test_julia()
 end
 
 function test_cxxwrap()
-    pkg_dir("CxxWrap")==nothing && @error("CxxWrap is not installed")
+    pkg_dir("CxxWrap")==nothing && error("CxxWrap is not installed")
     ext_cpp=tempname()*".cpp"
     main_jl=tempname()*".jl"
     write(ext_cpp,"""
@@ -1485,7 +1535,7 @@ function test_cxxwrap()
 end
 
 function test_package_compiler()
-    pkg_dir("PackageCompiler")==nothing && @error("PackageCompiler is not installed")
+    pkg_dir("PackageCompiler")==nothing && error("PackageCompiler is not installed")
     tmp=mktempdir()
     
     tmp1=joinpath(tmp,"foo.cpp")
