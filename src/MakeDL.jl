@@ -1213,16 +1213,16 @@ function matlab_engine()
 
     engEvalString(str)=ccall(dlsym(dlengine,"engEvalString"),Cint,(Ptr{Cvoid},Ptr{UInt8}),engine,str)
 
-    engClose()=ccall(dlsym(dlengin,"engClose"),Cint,(Ptr{Cvoid},),engine)
+    engClose()=ccall(dlsym(dlengine,"engClose"),Cint,(Ptr{Cvoid},),engine)
     
     function engGetDoubles(name)
         t=ccall(dlsym(dlengine,"engGetVariable"),Ptr{Cvoid},(Ptr{Cvoid},Ptr{UInt8}),engine,name)
         t==C_NULL && error("Variable $name does not exist")
         ccall(dlsym(dlengine,"mxIsDouble"),Bool,(Ptr{Cvoid},),t) || error("Variable $name is not double array")
-        ndims=ccall(dlsym(dlengin,"mxGetNumberOfDimensions"),Csize_t,(Ptr{Cvoid},),t)
-        psz=ccall(dlsym(dlengin,"mxGetDimensions"),Ptr{Csize_t},(Ptr{Cvoid},),t)
+        ndims=ccall(dlsym(dlengine,"mxGetNumberOfDimensions"),Csize_t,(Ptr{Cvoid},),t)
+        psz=ccall(dlsym(dlengine,"mxGetDimensions"),Ptr{Csize_t},(Ptr{Cvoid},),t)
         sz=unsafe_wrap(Array,psz,ndims)
-        pd=ccall(dlsym(dlengin,"mxGetPr"),Ptr{Float64},(Ptr{Cvoid},),t)
+        pd=ccall(dlsym(dlengine,"mxGetPr"),Ptr{Float64},(Ptr{Cvoid},),t)
         return copy(unsafe_wrap(Array,pd,(sz...,)))
     end
     
@@ -1232,7 +1232,7 @@ function matlab_engine()
         sz=size(d)
         t=ccall(dlsym(dlengine,"mxCreateNumericArray"),Ptr{Cvoid},(Csize_t,Ptr{Csize_t},Int,Int),length(sz),[sz...],mxDOUBLE_CLASS,mxREAL)
         t==C_NULL && error("error when creating array in MATLAB")
-        pd=ccall(dlsym(dlengin,"mxGetPr"),Ptr{Float64},(Ptr{Cvoid},),t)
+        pd=ccall(dlsym(dlengine,"mxGetPr"),Ptr{Float64},(Ptr{Cvoid},),t)
         unsafe_copyto!(pd,pointer(d),length(d))
         ccall(dlsym(dlengine,"engPutVariable"),Int,(Ptr{Cvoid},Ptr{UInt8},Ptr{Cvoid}),engine,name,t) == 0 || error("Error when putting $name to MATLAB")
         return d
