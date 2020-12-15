@@ -234,6 +234,38 @@ function rw_define(filename;args...)
     return ret,dirty
 end
 
+"""
+    set_rpath(file,path)
+
+Change the RPATH of the executable or library `file` to `path`.
+"""
+function set_rpath(file,path)
+    @static if Sys.iswindows()
+        error("Cannot set rpath in Windows system")
+    end
+    if !success(`which patchelf`)
+        error("Need to install patchelf and add it to path")
+    end
+    run(`patchelf --set-rpath $path $file`)
+    nothing
+end
+
+"""
+    print_rpath(file)
+
+List the RPATH of the executable or library `file`.
+"""
+function print_rpath(file)
+    @static if Sys.iswindows()
+        error("Cannot list rpath in Windows system")
+    end
+    if !success(`which patchelf`)
+        error("Need to install patchelf and add it to path")
+    end
+    run(`patchelf --print-rpath $file`)
+    nothing
+end
+
 #Main function for building C/C++ code or files
 function cbuild(;
         files::VStr=Str[], #input files. NOTICE: input file type is determined by its ext
@@ -930,6 +962,11 @@ function run_opencv(code, return_type=Nothing; includes="", args...)
     run_cc(code,return_type;includes="#include <opencv2/opencv.hpp>\nusing namespace cv;\n"*includes,opencv=true,args...)
 end
 
+"""
+    show_opencv_version(;verbose=false)
+
+Show OpenCV version information. If `verbose` is `true`, also show the building information.
+"""
 function show_opencv_version(;verbose=false)
     verbose && run_opencv(raw"""printf("%s",getBuildInformation().c_str())""")
     run_opencv(raw"""printf("CV_VERSION: %s\n",CV_VERSION);""")
@@ -1192,7 +1229,16 @@ function test_opencv_ocl(;args...)
     @info "test_opencv_ocl passed"
 end
 
+"""
+    matlab_engine()
 
+Open MATLAB engine, and return several functions to interoperate between Julia and MATLAB engine:
+
+- `engEvalString(str)`: run `str` in MATLAB
+- `engClose()`: close MATLAB engine
+- `engGetDoubles(name)`: copy double array `name` from MATLAB to Julia
+- `engPutDoubles(name,d::Array{Float64})`: copy Float64 array `d` from Julia to MATLAB variable `name`
+"""
 function matlab_engine()
     @static if Sys.iswindows()
         dlengine_file=joinpath(DEFAULT_MATLAB_ROOT,"bin","win64","libeng.dll")
