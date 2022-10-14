@@ -648,7 +648,8 @@ function cbuild(;
                upush!(options,"-w")  #disable all warnings
             end
             if crt_static
-                upush!(options,"-static-libgcc") #normally it is not a good idea to static link to libgcc, sometimes it is OK to static link to libstdc++, almost never static link to libc
+                #upush!(options,"-static")
+                upush!(options,"-static-libgcc","-static-libstdc++") #normally it is not a good idea to static link to libgcc, sometimes it is OK to static link to libstdc++, almost never static link to libc, see: https://micro.nicholaswilson.me.uk/post/31855915892/rules-of-static-linking-libstdc-libc-libgcc
             end
             for p in lib_rpath
                 upush!(options,"-Wl,-rpath="*p)
