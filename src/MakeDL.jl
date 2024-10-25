@@ -2,18 +2,19 @@ module MakeDL
 
 using Test,Libdl
 
-export cbuild,cbuild_exe,cfunc,run_cc,run_opencv,@CC_str,rw_define,@dynamic,@srpath_str
+export cbuild,cbuild_exe,cfunc,run_cc,run_opencv,show_opencv_version,@CC_str,rw_define,@dynamic,@srpath_str
 
 let
     dep_file1=joinpath(dirname(@__DIR__), "deps", "MakeDL_settings.jl")
     dep_file2=joinpath(dirname(dirname(@__DIR__)), "MakeDL_settings.jl")
     dep_sample=joinpath(dirname(@__DIR__), "deps", "sample_settings.jl")
-    include_dependency(dep_file1)
-    include_dependency(dep_file2)
+    
     if isfile(dep_file1)
         include(dep_file1)
+        include_dependency(dep_file1)
     elseif isfile(dep_file2)
         include(dep_file2)
+        include_dependency(dep_file2)
     else
         __precompile__(false)
         print("""
@@ -36,8 +37,8 @@ if !isfile(PEXPORTS)
     #download("https://sourceforge.net/projects/mingw/files/MinGW/Extension/pexports/pexports-0.47/pexports-0.47-mingw32-bin.tar.xz")
 end
 
-const Str = String
-const VStr = Vector{String}
+const Str = AbstractString
+const VStr = Vector{<:AbstractString}
 
 
 #NOTICE: file name in cmd should not contain space, otherwise cannot run
@@ -90,7 +91,8 @@ function safe_rm(f)
     if isfile(f)
         try
             rm(f)
-        catch
+        catch e
+            @warn e
         end
     end
 end
@@ -122,6 +124,27 @@ function get_opencv_version(opencv_root::Str)
     bin=joinpath(opencv_root,"bin","opencv_version")
     ver_str=readchomp(`$bin`)
     return VersionNumber(join(split(ver_str,".")[1:3],"."))
+end
+
+function get_opencv_libs(opencv_root::Str)
+    @static if Sys.isunix()
+        t=readdir(joinpath(opencv_root,"lib"))
+        prefix="libopencv_"
+        postfix=".so"
+        tt=filter(s->startswith(s,prefix) && endswith(s,postfix), t)
+        return chop.(tt,head=length(prefix),tail=length(postfix))
+    elseif Sys.iswindows()
+        cv_ver=get_opencv_version(opencv_root)
+        opencv_version=string(cv_ver.major)*string(cv_ver.minor)*string(cv_ver.patch)
+        t=readdir(joinpath(opencv_root,"bin"))
+        prefix="opencv_"
+        postfix=opencv_version*".dll"
+        tt=filter(s->startswith(s,prefix) && endswith(s,postfix), t)
+        return chop.(tt,head=length(prefix),tail=length(postfix))        
+    else
+        @warn "not implement"
+        return String[]
+    end
 end
 
 
@@ -289,7 +312,7 @@ function cbuild(;
         cxxwrap::Bool=false, #build with CxxWrap.jl (not work for windows)
         matlab::Bool=false, #build mex for MATLAB
         matlab_root::Str=DEFAULT_MATLAB_ROOT,
-        matlab_gpu=false, #use mex gpu lib, nvcc compiler is necessary if true
+        matlab_gpu::Bool=false, #use mex gpu lib, nvcc compiler is necessary if true
         opencv::Bool=false, #link to OpenCV
         opencv_root::Str=DEFAULT_OPENCV_ROOT,
         opencv_libs::VStr=copy(DEFAULT_OPENCV_LIBS),
@@ -413,12 +436,20 @@ function cbuild(;
     else
         if opencv
             cv_ver=get_opencv_version(opencv_root)
-            if !("world" in opencv_libs)
-                upush!(opencv_libs,"core","imgproc") #these two libs are almost always necessary
-                if cv_ver>=v"3"
-                    upush!(opencv_libs,"imgcodecs")
+            if isempty(opencv_libs)
+                cv_libs=get_opencv_libs(opencv_root)
+                if "world" in cv_libs
+                    opencv_libs=["world"]
+                else
+                    opencv_libs=cv_libs
                 end
             end
+            # if !("world" in opencv_libs)
+            #     upush!(opencv_libs,"core","imgproc") #these two libs are almost always necessary
+            #     if cv_ver>=v"3"
+            #         upush!(opencv_libs,"imgcodecs")
+            #     end
+            # end
             @static if Sys.iswindows()
                 upush!(include_path,joinpath(opencv_root,"..","..","include"))
                 if opencv_static && !isdir(joinpath(opencv_root,"staticlib"))
@@ -808,7 +839,17 @@ macro dynamic(exp)
     if exp.head!=:call || exp.args[1]!=:ccall || typeof(exp.args[2])!=Expr || exp.args[2].head!=:tuple
         @show exp
         dump(exp)
-        error("unsupported ccall expression")
+        if exp.head!=:call
+            error("exp.head shoud be :call")
+        elseif exp.args[1]!=:ccall
+            error("exp.args[1] shoud be :ccall")
+        elseif typeof(exp.args[2])!=Expr
+            error("typeof(exp.args[2]) shoud be Expr")
+        elseif exp.args[2].head!=:tuple
+            error("exp.args[2].head shoud be :tuple")
+        else
+            error("unsupported ccall expression")
+        end
     end
     func=esc(exp.args[2].args[1])
     dl=esc(exp.args[2].args[2])
@@ -887,8 +928,9 @@ end
 Run piece of C++ code which can return a number. Normally for testing C/C++ code.
 
 # Examples
-
+    run_cc("putchar('1')")
     run_cc("return sin(1)",Float64)
+    run_cc("return f(1)",Int64;includes="int f(int t) {return t+1;}")
 """
 function run_cc(code, return_type=Nothing; includes="", args...)
     if includes==""
@@ -960,7 +1002,17 @@ Run piece of C++ code which can use OpenCV and return a number. Normally for tes
     run_opencv("return Mat_<float>(Mat::eye(2,2,CV_32F))(1,1)",Float32)
 """
 function run_opencv(code, return_type=Nothing; includes="", args...)
-    run_cc(code,return_type;includes="#include <opencv2/opencv.hpp>\nusing namespace cv;\n"*includes,opencv=true,args...)
+    @static if Sys.iswindows()
+        t=ENV["PATH"]
+        try
+            ENV["PATH"]=t*";"*joinpath(DEFAULT_OPENCV_ROOT,"bin")
+            run_cc(code,return_type;includes="#include <opencv2/opencv.hpp>\nusing namespace cv;\n"*includes,opencv=true,args...)
+        finally
+            ENV["PATH"]=t
+        end
+    else
+        run_cc(code,return_type;includes="#include <opencv2/opencv.hpp>\nusing namespace cv;\n"*includes,opencv=true,args...)
+    end
 end
 
 """
@@ -1095,6 +1147,26 @@ function test()
         end
     end
 
+    #test10, load dll dynamically
+    let
+        dllpath=cbuild(code="extern \"C\" int inc(int t){return t+1;}",export_names=["inc"]);
+        @static if Sys.isunix()
+            code="""
+                #include <dlfcn.h>
+                typedef int (*f)(int);
+                int g()
+                {
+                    void* h=dlopen("$dllpath",RTLD_LAZY);
+                    f p=(f)dlsym(h,"inc");
+                    int t=p(1);
+                    dlclose(h);
+                    return t;
+                }
+            """
+            @test run_cc("return g()",Int,includes=code)==2
+        elseif Sys.iswindows()
+        end
+    end
     @info "test MakeDL passed"
 end
 
@@ -1213,9 +1285,9 @@ end
 function test_opencv_gpu(;args...)
     cv_ver=get_opencv_version(DEFAULT_OPENCV_ROOT)
     if cv_ver<v"3"
-        @test run_opencv("Mat s(2,2,CV_32F); randu(s,0,1); gpu::GpuMat d; d.upload(s); gpu::gemm(d,d,1,d,1,d); Mat t; d.download(t); gemm(s,s,1,s,1,s); double m; minMaxLoc(abs(s-t),NULL,&m); return m;",Float32;includes = "#include <opencv2/gpu/gpu.hpp>",opencv_libs=["gpu"])<1e-6
+        @test run_opencv("Mat s(2,2,CV_32F); randu(s,0,1); gpu::GpuMat d; d.upload(s); gpu::gemm(d,d,1,d,1,d); Mat t; d.download(t); gemm(s,s,1,s,1,s); double m; minMaxLoc(abs(s-t),NULL,&m); return m;",Float32;includes = "#include <opencv2/gpu/gpu.hpp>")<1e-6
     else
-        @test run_opencv("Mat s(2,2,CV_32F); randu(s,0,1); cuda::GpuMat d; d.upload(s); cuda::gemm(d,d,1,d,1,d); Mat t; d.download(t); gemm(s,s,1,s,1,s); double m; minMaxLoc(abs(s-t),NULL,&m); return m;",Float32;includes = "#include <opencv2/cudaarithm.hpp>",opencv_libs=["cudaarithm"])<1e-6
+        @test run_opencv("Mat s(2,2,CV_32F); randu(s,0,1); cuda::GpuMat d; d.upload(s); cuda::gemm(d,d,1,d,1,d); Mat t; d.download(t); gemm(s,s,1,s,1,s); double m; minMaxLoc(abs(s-t),NULL,&m); return m;",Float32;includes = "#include <opencv2/cudaarithm.hpp>")<1e-6
     end
     @info "test_opencv_gpu passed"
 end
@@ -1223,7 +1295,7 @@ end
 function test_opencv_ocl(;args...)
     cv_ver=get_opencv_version(DEFAULT_OPENCV_ROOT)
     if cv_ver<v"3"
-        @test run_opencv("Mat s(2,2,CV_32F); randu(s,0,1); ocl::oclMat d; d.upload(s); exp(s,s); ocl::oclMat t; t.upload(s); exp(d,d); return ocl::absSum(d-t)[0];",Float32;includes="#include <opencv2/ocl/ocl.hpp>",opencv_libs=["ocl"])<1e-6
+        @test run_opencv("Mat s(2,2,CV_32F); randu(s,0,1); ocl::oclMat d; d.upload(s); exp(s,s); ocl::oclMat t; t.upload(s); exp(d,d); return ocl::absSum(d-t)[0];",Float32;includes="#include <opencv2/ocl/ocl.hpp>")<1e-6
     else
         @test run_opencv("ocl::setUseOpenCL(true); Mat s(2,2,CV_32F); randu(s,0,1); UMat d; s.copyTo(d); exp(s,s); UMat t; s.copyTo(t); exp(d,d); return norm(d,t,NORM_INF);",Float32;includes="#include <opencv2/core/ocl.hpp>")<1e-6
     end 
@@ -1517,7 +1589,8 @@ function test_julia()
     write(main_cpp,"""
         #include <stdio.h>
         #include <julia.h>
-        JULIA_DEFINE_FAST_TLS()
+
+        //JULIA_DEFINE_FAST_TLS // only define this once, in an executable (not in a shared library) if you want fast code. It should be JULIA_DEFINE_FAST_TLS() before Julia 1.7
 
         void call(jl_function_t* sqr1, int* x, int len)
         {
