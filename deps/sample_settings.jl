@@ -1,8 +1,9 @@
 #const DEFAULT_VC_ENV = [raw"C:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\vcvarsall.bat","amd64"] #vs2010
 #const DEFAULT_VC_ENV = [raw"C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\vcvarsall.bat","amd64"] #vs2013
-const DEFAULT_VC_ENV = [raw"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat","x64"] #vs2019 Community
+#const DEFAULT_VC_ENV = [raw"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat", "x64"] #vs2019 Community
+const DEFAULT_VC_ENV = [raw"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat", "x64"] #vs2022 Community
 
-const DEFAULT_ICL_ENV = [raw"C:\Program Files (x86)\Intel\Composer XE 2011 SP1\bin\ipsxe-comp-vars.bat","vs2010","intel64"]
+const DEFAULT_ICL_ENV = [raw"C:\Program Files (x86)\Intel\Composer XE 2011 SP1\bin\ipsxe-comp-vars.bat", "vs2010", "intel64"]
 
 @static if Sys.iswindows()
     const DEFAULT_MATLAB_ROOT = raw"C:\MATLAB\R2016b"
@@ -19,6 +20,5 @@ else
     #const DEFAULT_OPENCV_ROOT = "/opt/opencv4.3.0"
 end
 
-const DEFAULT_OPENCV_LIBS = ["world"]
-#const DEFAULT_OPENCV_LIBS = ["calib3d","highgui"] #"core" and "imgproc" are always included in `cbuild` function
-
+const DEFAULT_OPENCV_LIBS = String[] #empty means "world" or all available libs
+#const DEFAULT_OPENCV_LIBS = ["imgproc", "calib3d","highgui"] #"core" is always included in `cbuild` function
