@@ -1,2 +1,4 @@
 *.clb
-deps/MakeDL_settings.jl
+LocalPreferences.toml
+Manifest.toml
+
