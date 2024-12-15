@@ -1454,7 +1454,7 @@ function test_opencv_imshow(; args...)
 end
 
 function test_opencv_gpu(; args...)
-    cv_ver = get_opencv_version()
+    cv_ver = get_opencv_version(OPENCV_ROOT())
     if cv_ver < v"3"
         @test run_opencv("Mat s(2,2,CV_32F); randu(s,0,1); gpu::GpuMat d; d.upload(s); gpu::gemm(d,d,1,d,1,d); Mat t; d.download(t); gemm(s,s,1,s,1,s); double m; minMaxLoc(abs(s-t),NULL,&m); return m;", Float32; includes="#include <opencv2/gpu/gpu.hpp>") < 1e-6
     else
@@ -1464,7 +1464,7 @@ function test_opencv_gpu(; args...)
 end
 
 function test_opencv_ocl(; args...)
-    cv_ver = get_opencv_version()
+    cv_ver = get_opencv_version(OPENCV_ROOT())
     if cv_ver < v"3"
         @test run_opencv("Mat s(2,2,CV_32F); randu(s,0,1); ocl::oclMat d; d.upload(s); exp(s,s); ocl::oclMat t; t.upload(s); exp(d,d); return ocl::absSum(d-t)[0];", Float32; includes="#include <opencv2/ocl/ocl.hpp>") < 1e-6
     else
