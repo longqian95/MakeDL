@@ -1,45 +1,151 @@
 module MakeDL
 
 using Test, Libdl
+using Preferences
 
 export cbuild, cbuild_exe, cfunc, run_cc, run_opencv, show_opencv_version, @CC_str, rw_define, @dynamic, @srpath_str
 
-let
-    dep_file1 = joinpath(dirname(@__DIR__), "deps", "MakeDL_settings.jl")
-    dep_file2 = joinpath(dirname(dirname(@__DIR__)), "MakeDL_settings.jl")
-    dep_sample = joinpath(dirname(@__DIR__), "deps", "sample_settings.jl")
+# let
+#     dep_file1 = joinpath(dirname(@__DIR__), "deps", "MakeDL_settings.jl")
+#     dep_file2 = joinpath(dirname(dirname(@__DIR__)), "MakeDL_settings.jl")
+#     dep_sample = joinpath(dirname(@__DIR__), "deps", "sample_settings.jl")
 
-    if isfile(dep_file1)
-        include(dep_file1)
-        include_dependency(dep_file1)
-    elseif isfile(dep_file2)
-        include(dep_file2)
-        include_dependency(dep_file2)
-    else
-        __precompile__(false)
-        print("""
+#     if isfile(dep_file1)
+#         include(dep_file1)
+#         include_dependency(dep_file1)
+#     elseif isfile(dep_file2)
+#         include(dep_file2)
+#         include_dependency(dep_file2)
+#     else
+#         __precompile__(false)
+#         print("""
 
-            ------------------------------------
-            NOTICE:
+#             ------------------------------------
+#             NOTICE:
 
-            Please copy '$dep_sample' to '$dep_file2' and modify related settings in the file to setup building environment.
+#             Please copy '$dep_sample' to '$dep_file2' and modify related settings in the file to setup building environment.
 
-            Every setting should have value. If no information, set to ""
+#             Every setting should have value. If no information, set to ""
 
-            Run `MakeDL.test()` or `MakeDL.test_essential()` to check settings.
-            ------------------------------------
-            """)
+#             Run `MakeDL.test()` or `MakeDL.test_essential()` to check settings.
+#             ------------------------------------
+#             """)
+#     end
+# end
+
+@static if Sys.iswindows()
+    const PEXPORTS = joinpath(dirname(@__DIR__), "deps", "pexports.exe")
+    if !isfile(PEXPORTS)
+        download("https://sourceforge.net/projects/mingw/files/MinGW/Extension/pexports/pexports-0.47/pexports-0.47-mingw32-bin.tar.xz", PEXPORTS)
     end
-end
-
-const PEXPORTS = joinpath(dirname(@__DIR__), "deps", "pexports.exe")
-if !isfile(PEXPORTS)
-    #download("https://sourceforge.net/projects/mingw/files/MinGW/Extension/pexports/pexports-0.47/pexports-0.47-mingw32-bin.tar.xz")
 end
 
 const Str = AbstractString
 const VStr = Vector{<:AbstractString}
 
+function VC_ENV()
+    if !@has_preference("VC_ENV")
+        known = [[raw"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat", "x64"], #vs2022 Community
+            [raw"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat", "x64"], #vs2019 Community
+            [raw"C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\vcvarsall.bat", "amd64"], #vs2013
+            [raw"C:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\vcvarsall.bat", "amd64"], #vs2010
+        ]
+        for f in known
+            if isfile(f[1])
+                @set_preferences!("VC_ENV" => f)
+                return f
+            end
+        end
+        @error "VC_ENV is empty, please use MakeDL.set_preferences!(\"VC_ENV\", <env>) to set it"
+        return []
+    end
+    return @load_preference("VC_ENV")
+end
+function ICL_ENV()
+    if !@has_preference("ICL_ENV")
+        known = [[raw"C:\Program Files (x86)\Intel\Composer XE 2011 SP1\bin\ipsxe-comp-vars.bat", "vs2010", "intel64"]
+        ]
+        for f in known
+            if isfile(f[1])
+                @set_preferences!("ICL_ENV" => f)
+                return f
+            end
+        end
+        @error "ICL_ENV is empty, please use MakeDL.set_preferences!(\"ICL_ENV\", <env>) to set it"
+        return []
+    end
+    return @load_preference("ICL_ENV")
+end
+function MATLAB_ROOT()
+    if !@has_preference("MATLAB_ROOT")
+        @static if Sys.iswindows()
+            known = [raw"C:\MATLAB\R2016b"]
+            for f in known
+                if isdir(f)
+                    @set_preferences!("MATLAB_ROOT" => f)
+                    return f
+                end
+            end
+        else
+            #f = match(r"'(.*)'",readchomp(`matlab -batch matlabroot`))[1] #too slow
+            f = success(`which matlab`) ? dirname(dirname(realpath(readchomp(`which matlab`)))) : ""
+            if isdir(f)
+                @set_preferences!("MATLAB_ROOT" => f)
+                return f
+            end
+        end
+        @error "MATLAB_ROOT is empty, please use MakeDL.set_preferences!(\"MATLAB_ROOT\", <dir>) to set it"
+        return []
+    end
+    return @load_preference("MATLAB_ROOT")
+end
+function OPENCV_ROOT()
+    if !@has_preference("OPENCV_ROOT")
+        @static if Sys.iswindows()
+            known = [raw"C:\opencv3.4.8\build\x64\vc15"]
+            for f in known
+                if isdir(f)
+                    @set_preferences!("OPENCV_ROOT" => f)
+                    return f
+                end
+            end
+        else
+            #f = success(`which opencv_version`) ? dirname(dirname(realpath(readchomp(`which opencv_version`)))) : ""
+            f = success(`which opencv_version`) ? match(r"Install to:\s*(\N*)\s*\n", readchomp(`opencv_version -v`))[1] : ""
+            if isdir(f)
+                @set_preferences!("OPENCV_ROOT" => f)
+                return f
+            end
+        end
+        @error "OPENCV_ROOT is empty, please use MakeDL.set_preferences!(\"OPENCV_ROOT\", <dir>) to set it"
+        return []
+    end
+    return @load_preference("OPENCV_ROOT")
+end
+function DEFAULT_OPENCV_LIBS()
+    @load_preference("DEFAULT_OPENCV_LIBS", String[]) #empty means "world" or all available libs
+end
+
+@doc raw"""
+    set_preferences!(name,value)
+
+See also [`MakeDL.get_preferences`](@ref)
+
+# Example
+```
+set_preferences!("VC_ENV", [raw"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat", "x64"])
+set_preferences!("ICL_ENV", [raw"C:\Program Files (x86)\Intel\Composer XE 2011 SP1\bin\ipsxe-comp-vars.bat", "vs2010", "intel64"])
+set_preferences!("MATLAB_ROOT", raw"C:\MATLAB\R2016b")
+set_preferences!("OPENCV_ROOT", raw"C:\opencv3.4.8\build\x64\vc15")
+```
+"""
+function set_preferences!(name, value)
+    @set_preferences!(name => value)
+end
+
+function get_preferences(name)
+    @load_preference(name)
+end
 
 #NOTICE: file name in cmd should not contain space, otherwise cannot run
 function run_vc_cmd(env, cmd; show_cmd) #run visual c++ command
@@ -351,16 +457,12 @@ function cbuild(;
     link_options::VStr=Str[],
     export_names::VStr=Str[], #specify the exported symbols, not necessary for gcc/g++/clang 
     compiler::Str="", #can be g++,gcc,clang,cl,icl,nvcc. Linux default is g++; Windows default is cl
-    vc_env::VStr=DEFAULT_VC_ENV,
-    icl_env::VStr=DEFAULT_ICL_ENV,
     julia::Bool=false, #build with Julia
     cxxwrap::Bool=false, #build with CxxWrap.jl (not work for windows)
     matlab::Bool=false, #build mex for MATLAB
-    matlab_root::Str=DEFAULT_MATLAB_ROOT,
     matlab_gpu::Bool=false, #use mex gpu lib, nvcc compiler is necessary if true
     opencv::Bool=false, #link to OpenCV
-    opencv_root::Str=DEFAULT_OPENCV_ROOT,
-    opencv_libs::VStr=copy(DEFAULT_OPENCV_LIBS),
+    opencv_libs::VStr=DEFAULT_OPENCV_LIBS(),
     opencv_static::Bool=false, #static link to OpenCV, only work for Windows
     opencv_rpath::Bool=true, #make OpenCV libs in rpath, only work for Linux
     openmp::Bool=false,
@@ -452,10 +554,22 @@ function cbuild(;
     @assert all(isfile.(depend_files))
     @assert all(isdir.(include_path))
     @assert all(isdir.(lib_path))
-    opencv && @assert isdir(opencv_root)
-    matlab && @assert isdir(matlab_root)
-    compiler == "cl" && @assert isfile(vc_env[1])
-    compiler == "icl" && @assert isfile(icl_env[1])
+    if opencv
+        opencv_root = OPENCV_ROOT()
+        @assert isdir(opencv_root)
+    end
+    if matlab
+        matlab_root = MATLAB_ROOT()
+        @assert isdir(matlab_root)
+    end
+    if compiler == "cl"
+        vc_env = VC_ENV()
+        @assert isfile(vc_env[1])
+    end
+    if compiler == "icl"
+        icl_env = ICL_ENV()
+        @assert isfile(icl_env[1])
+    end
     compiler == "gcc" && @assert success(`gcc --version`)
     compiler == "g++" && @assert success(`g++ --version`)
     compiler == "clang" && @assert success(`clang --version`)
@@ -904,7 +1018,10 @@ macro dynamic(exp)
         let
             h = Libdl.dlopen(string($(dl)))
             try
-                ccall(Libdl.dlsym(h, string($func)), $(args...))
+                fp = Libdl.dlsym(h, string($func))
+                ccall(fp, $(args...))
+                #`ccall(Libdl.dlsym(h, string($func)), $(args...))` is OK. But an error will occur during debugging.
+                #It seems a bug in Debugger.jl
             finally
                 Libdl.dlclose(h)
                 #if the dll uses openmp, then calling dlcose immediately after ccall is not safe, SEE Julia issue#10938
@@ -1051,7 +1168,7 @@ function run_opencv(code, return_type=Nothing; includes="", args...)
     @static if Sys.iswindows()
         t = ENV["PATH"]
         try
-            ENV["PATH"] = t * ";" * joinpath(DEFAULT_OPENCV_ROOT, "bin")
+            ENV["PATH"] = t * ";" * joinpath(OPENCV_ROOT(), "bin")
             run_cc(code, return_type; includes="#include <opencv2/opencv.hpp>\nusing namespace cv;\n" * includes, opencv=true, args...)
         finally
             ENV["PATH"] = t
@@ -1337,7 +1454,7 @@ function test_opencv_imshow(; args...)
 end
 
 function test_opencv_gpu(; args...)
-    cv_ver = get_opencv_version(DEFAULT_OPENCV_ROOT)
+    cv_ver = get_opencv_version()
     if cv_ver < v"3"
         @test run_opencv("Mat s(2,2,CV_32F); randu(s,0,1); gpu::GpuMat d; d.upload(s); gpu::gemm(d,d,1,d,1,d); Mat t; d.download(t); gemm(s,s,1,s,1,s); double m; minMaxLoc(abs(s-t),NULL,&m); return m;", Float32; includes="#include <opencv2/gpu/gpu.hpp>") < 1e-6
     else
@@ -1347,7 +1464,7 @@ function test_opencv_gpu(; args...)
 end
 
 function test_opencv_ocl(; args...)
-    cv_ver = get_opencv_version(DEFAULT_OPENCV_ROOT)
+    cv_ver = get_opencv_version()
     if cv_ver < v"3"
         @test run_opencv("Mat s(2,2,CV_32F); randu(s,0,1); ocl::oclMat d; d.upload(s); exp(s,s); ocl::oclMat t; t.upload(s); exp(d,d); return ocl::absSum(d-t)[0];", Float32; includes="#include <opencv2/ocl/ocl.hpp>") < 1e-6
     else
@@ -1368,9 +1485,9 @@ Open MATLAB engine, and return several functions to interoperate between Julia a
 """
 function matlab_engine()
     @static if Sys.iswindows()
-        dlengine_file = joinpath(DEFAULT_MATLAB_ROOT, "bin", "win64", "libeng.dll")
+        dlengine_file = joinpath(MATLAB_ROOT(), "bin", "win64", "libeng.dll")
     else
-        dlengine_file = joinpath(DEFAULT_MATLAB_ROOT, "bin", "glnxa64", "libeng.so")
+        dlengine_file = joinpath(MATLAB_ROOT(), "bin", "glnxa64", "libeng.so")
     end
     !isfile(dlengine_file) && error("MATLAB engine file '$dlengine_file' does not exist")
     dlengine = dlopen(dlengine_file)
