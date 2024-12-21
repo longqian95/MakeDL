@@ -665,11 +665,15 @@ function cbuild(;
         end
 
         if cxxwrap
-            cxxwrap_home = pkg_dir("CxxWrap")
-            if cxxwrap_home == nothing
-                error("CxxWrap is not installed")
-            end
-            jlcxx_home = joinpath(cxxwrap_home, "deps", "usr")
+            #cxxwrap_home = pkg_dir("CxxWrap")
+            #if cxxwrap_home == nothing
+            #    error("CxxWrap is not installed")
+            #end
+            #jlcxx_home = joinpath(cxxwrap_home, "deps", "usr")
+
+            #jlcxx_home = include_string(Main, "using CxxWrap; CxxWrap.prefix_path()")
+            #jlcxx_home = readchomp(`julia -e "using CxxWrap; print(CxxWrap.prefix_path())"`)
+            jlcxx_home = @eval Main (using CxxWrap; CxxWrap.prefix_path())
             julia_home = dirname(Base.Sys.BINDIR)
             upush!(include_path, joinpath(julia_home, "include", "julia"))
             upush!(defines, "JULIA_ENABLE_THREADING=1")
@@ -1099,9 +1103,9 @@ Run piece of C++ code which can return a number. Normally for testing C/C++ code
 function run_cc(code, return_type=Nothing; includes="", args...)
     if includes == ""
         includes = """
-                       #include <stdlib.h>
-                       #include <string.h>
-                       #include <math.h>
+                   #include <stdlib.h>
+                   #include <string.h>
+                   #include <math.h>
                    """
     end
     if return_type == Nothing
@@ -1202,22 +1206,21 @@ function test()
 
     #test2
     let
-        hf, hdll = cfunc(
-            "csort",
+        hf, hdll = cfunc("csort",
             raw"""
-#include <algorithm>
+            #include <algorithm>
 
-template <class T>
-inline void sort(T* p, int len)
-{
-    std::sort(p,p+len);
-}
+            template <class T>
+            inline void sort(T* p, int len)
+            {
+                std::sort(p,p+len);
+            }
 
-extern "C" void csort(int* p, int len)
-{
-    sort(p,len);
-}
-"""
+            extern "C" void csort(int* p, int len)
+            {
+                sort(p,len);
+            }
+            """
         )
         t = rand(Int32, 10)
         ccall(hf, Nothing, (Ptr{Int32}, Int32), t, length(t))
@@ -1297,13 +1300,12 @@ extern "C" void csort(int* p, int len)
 
         tmp2 = tempname() * ".cpp"
         open(tmp2, "w") do hf
-            write(
-                hf,
+            write(hf,
                 raw"""
-           #include <stdio.h>
-           extern "C" char test(char t);
-           int main(){putchar(test('a')); return 0;}
-           """
+                #include <stdio.h>
+                extern "C" char test(char t);
+                int main(){putchar(test('a')); return 0;}
+                """
             )
         end
         t2 = cbuild_exe(tmp2, libs=[dllpath], rpath=true) #full lib path
@@ -1333,7 +1335,7 @@ extern "C" void csort(int* p, int len)
                       dlclose(h);
                       return t;
                   }
-              """
+                """
             @test run_cc("return g()", Int, includes=code) == 2
         elseif Sys.iswindows()
         end
@@ -1355,17 +1357,19 @@ end
 
 function test_openmp()
     #cannot use run_cc or close dll handle immediately, because if the dll uses openmp, then calling Libdl.dlcose immediately after ccall is not safe, SEE Julia issue#10938
-    h1, d1 = cfunc("test", """
-            extern "C" int test()
-            {
-                int s=0;
-                #pragma omp parallel for reduction(+:s)
-                for(int n=0; n<256; ++n) s+=n;
-                return s;
-            }
-            """; openmp=true)
+    h1, d1 = cfunc("test",
+        """
+        extern "C" int test()
+        {
+            int s=0;
+            #pragma omp parallel for reduction(+:s)
+            for(int n=0; n<256; ++n) s+=n;
+            return s;
+        }
+        """; openmp=true)
     s1 = ccall(h1, Int, ())
-    h2, d2 = cfunc("test", """//slower than reduction
+    h2, d2 = cfunc("test", """
+            //slower than reduction
             extern "C" int test()
             {
                int s=0;
@@ -1377,46 +1381,51 @@ function test_openmp()
                 }
                 return s;
             }
-           """; openmp=true)
+            """; openmp=true)
     s2 = ccall(h2, Int, ())
     @static if Sys.iswindows() #vc only support very few openmp instructions
         @test s1 == s2 == sum(0:255)
         @info "test_openmp passed"
         return
     end
-    h3, d3 = cfunc("test", """//single thread
-            extern "C" int test()
-            {
-               int s=0;
-               #pragma omp simd
-               for(int n=0; n<256; ++n) s+=n;
-               return s;
-           }
-           """; openmp=true)
+    h3, d3 = cfunc("test",
+        """
+        //single thread
+        extern "C" int test()
+        {
+           int s=0;
+           #pragma omp simd
+           for(int n=0; n<256; ++n) s+=n;
+           return s;
+       }
+       """; openmp=true)
     s3 = ccall(h3, Int, ())
-    h4, d4 = cfunc("test", """//slow than atomic
-            #include <omp.h>
-            extern "C" int test()
+    h4, d4 = cfunc("test",
+        """
+        //slow than atomic
+        #include <omp.h>
+        extern "C" int test()
+        {
+            int s=0;
+            #pragma omp parallel num_threads(256)
             {
-                int s=0;
-                #pragma omp parallel num_threads(256)
-                {
-                    #pragma omp critical
-                    s+=omp_get_thread_num();
-                }
-                return s;
+                #pragma omp critical
+                s+=omp_get_thread_num();
             }
-           """; openmp=true)
+            return s;
+        }
+        """; openmp=true)
     s4 = ccall(h4, Int, ())
-    h5, d5 = cfunc("test", """
-            extern "C" int test()
-            {
-                int s=0;
-                #pragma omp distribute parallel for simd reduction(+:s)
-                for(int n=0; n<256; ++n) s+=n;
-                return s;
-            }
-           """; openmp=true)
+    h5, d5 = cfunc("test",
+        """
+        extern "C" int test()
+        {
+            int s=0;
+            #pragma omp distribute parallel for simd reduction(+:s)
+            for(int n=0; n<256; ++n) s+=n;
+            return s;
+        }
+        """; openmp=true)
     s5 = ccall(h5, Int, ())
     #Libdl.dlclose.((d1,d2,d3,d4,d5))
     @test s1 == s2 == s3 == s4 == s5 == sum(0:255)
@@ -1437,17 +1446,19 @@ function test_opencv()
 end
 
 function test_opencv_imshow(; args...)
-    hf, hdll = cfunc("test", raw"""
-           #include <opencv2/opencv.hpp>
-           using namespace cv;
-           extern "C" void test(void)
-           {
-               Mat t(100,100,CV_64FC1);
-               randu(t,0,1);
-               imshow("test",t);
-               waitKey(1000); //wait 1 second
-               destroyAllWindows();
-           }"""; opencv=true, force=true, show_cmd=false, args...)
+    hf, hdll = cfunc("test",
+        raw"""
+        #include <opencv2/opencv.hpp>
+        using namespace cv;
+        extern "C" void test(void)
+        {
+           Mat t(100,100,CV_64FC1);
+           randu(t,0,1);
+           imshow("test",t);
+           waitKey(1000); //wait 1 second
+           destroyAllWindows();
+        }""";
+        opencv=true, force=true, show_cmd=false, args...)
     ccall(hf, Nothing, ())
     Libdl.dlclose(hdll)
     @info "test_opencv_imshow passed"
@@ -1535,16 +1546,15 @@ end
 function test_matlab()
     tmp = mktempdir()
     cppfile = joinpath(tmp, "test.cpp")
-    write(
-        cppfile,
+    write(cppfile,
         raw"""
-#include <mex.h>
-void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
-{
-    mexPrintf("hello\n");
-    plhs[0]=mxCreateDoubleScalar(3.14);
-}
-"""
+        #include <mex.h>
+        void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
+        {
+            mexPrintf("hello\n");
+            plhs[0]=mxCreateDoubleScalar(3.14);
+        }
+        """
     )
     t = cbuild(cppfile, matlab=true)
     m = matlab_engine()
@@ -1558,57 +1568,56 @@ end
 function test_matlab_gpu()
     tmp = mktempdir()
     cufile = joinpath(tmp, "testgpu.cu")
-    write(
-        cufile,
+    write(cufile,
         raw"""
-#include <mex.h>
-#include <gpu/mxGPUArray.h>
-__global__ void TimesTwo(const double * const A, double * const B, const int N)
-{
-    /* Calculate the global linear index, assuming a 1-d grid. */
-    int i = blockDim.x * blockIdx.x + threadIdx.x;
-    if (i < N) B[i] = 2.0 * A[i];
-}
-//new method to build MEX-Functions containing CUDA code supported after matlab 2013b
-void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
-{
-    if(nrhs!=1)
-    {
-        mexErrMsgIdAndTxt("mexGPUExample:InvalidInput", "Invalid input to MEX file.");
-    }
+        #include <mex.h>
+        #include <gpu/mxGPUArray.h>
+        __global__ void TimesTwo(const double * const A, double * const B, const int N)
+        {
+            /* Calculate the global linear index, assuming a 1-d grid. */
+            int i = blockDim.x * blockIdx.x + threadIdx.x;
+            if (i < N) B[i] = 2.0 * A[i];
+        }
+        //new method to build MEX-Functions containing CUDA code supported after matlab 2013b
+        void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
+        {
+            if(nrhs!=1)
+            {
+                mexErrMsgIdAndTxt("mexGPUExample:InvalidInput", "Invalid input to MEX file.");
+            }
 
-    mxInitGPU();
-    
-    //get the data
-    const mxGPUArray *A = mxGPUCreateFromMxArray(prhs[0]); //prhs[0] can be either GPU or CPU data.
-    const double *d_A = (const double *)(mxGPUGetDataReadOnly(A));
+            mxInitGPU();
+            
+            //get the data
+            const mxGPUArray *A = mxGPUCreateFromMxArray(prhs[0]); //prhs[0] can be either GPU or CPU data.
+            const double *d_A = (const double *)(mxGPUGetDataReadOnly(A));
 
-    //Create a GPUArray to hold the result and get its underlying pointer.
-    mxGPUArray *B = mxGPUCreateGPUArray(mxGPUGetNumberOfDimensions(A),
-                            mxGPUGetDimensions(A),
-                            mxGPUGetClassID(A),
-                            mxGPUGetComplexity(A),
-                            MX_GPU_DO_NOT_INITIALIZE);
-    double *d_B = (double *)(mxGPUGetData(B));
+            //Create a GPUArray to hold the result and get its underlying pointer.
+            mxGPUArray *B = mxGPUCreateGPUArray(mxGPUGetNumberOfDimensions(A),
+                                    mxGPUGetDimensions(A),
+                                    mxGPUGetClassID(A),
+                                    mxGPUGetComplexity(A),
+                                    MX_GPU_DO_NOT_INITIALIZE);
+            double *d_B = (double *)(mxGPUGetData(B));
 
-    //Call the CUDA kernel
-    int N = (int)(mxGPUGetNumberOfElements(A));
-    const int threadsPerBlock = 256;
-    const int blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;
-    TimesTwo<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, N);
+            //Call the CUDA kernel
+            int N = (int)(mxGPUGetNumberOfElements(A));
+            const int threadsPerBlock = 256;
+            const int blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;
+            TimesTwo<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, N);
 
-    //make the returned array is either on GPU or on CPU according to the input
-    if(mxIsGPUArray(prhs[0]))
-        plhs[0] = mxGPUCreateMxArrayOnGPU(B);
-    else
-        plhs[0] = mxGPUCreateMxArrayOnCPU(B);
+            //make the returned array is either on GPU or on CPU according to the input
+            if(mxIsGPUArray(prhs[0]))
+                plhs[0] = mxGPUCreateMxArrayOnGPU(B);
+            else
+                plhs[0] = mxGPUCreateMxArrayOnCPU(B);
 
-    //The mxGPUArray pointers are host-side structures that refer to device
-    //data. These must be destroyed before leaving the MEX function.
-    mxGPUDestroyGPUArray(A);
-    mxGPUDestroyGPUArray(B);
-}
-"""
+            //The mxGPUArray pointers are host-side structures that refer to device
+            //data. These must be destroyed before leaving the MEX function.
+            mxGPUDestroyGPUArray(A);
+            mxGPUDestroyGPUArray(B);
+        }
+        """
     )
     t = cbuild(cufile, matlab=true, matlab_gpu=true, compiler="nvcc")
     m = matlab_engine()
@@ -1633,13 +1642,13 @@ function test_cuda_ptx_cpp()
     write(
         tmp,
         raw"""
-  __global__ void TimesTwo(const double* A, double* B, int N)
-  {
-      /* Calculate the global linear index, assuming a 1-d grid. */
-      int i = blockDim.x * blockIdx.x + threadIdx.x;
-      if (i < N) B[i] = 2.0 * A[i];
-  }
-  """
+        __global__ void TimesTwo(const double* A, double* B, int N)
+        {
+          /* Calculate the global linear index, assuming a 1-d grid. */
+          int i = blockDim.x * blockIdx.x + threadIdx.x;
+          if (i < N) B[i] = 2.0 * A[i];
+        }
+        """
     )
     t1 = cbuild(tmp, output_type="ptx", compiler="nvcc")
     t2 = cbuild(tmp, output_type="cpp", compiler="nvcc")
@@ -1702,48 +1711,48 @@ end
 
 function test_cuda_vsadu4()
     code = """
-          unsigned int vsadu4(unsigned int a, unsigned int b)
-          {
-              unsigned char* pa=(unsigned char*)&a;
-              unsigned char* pb=(unsigned char*)&b;
-              return abs(pa[0]-pb[0])+abs(pa[1]-pb[1])+abs(pa[2]-pb[2])+abs(pa[3]-pb[3]);
-          }
-          """
+        unsigned int vsadu4(unsigned int a, unsigned int b)
+        {
+            unsigned char* pa=(unsigned char*)&a;
+            unsigned char* pb=(unsigned char*)&b;
+            return abs(pa[0]-pb[0])+abs(pa[1]-pb[1])+abs(pa[2]-pb[2])+abs(pa[3]-pb[3]);
+        }
+        """
     code_norm = """
-              #include <math.h>
-              extern "C" $code
-              """
+                #include <math.h>
+                extern "C" $code
+                """
     code_simd = """
-              //use GCC SIMD vector instructions
-              extern "C" unsigned int vsadu4(unsigned int a, unsigned int b)
-              {
-                  typedef char v8qi __attribute__ ((vector_size(8)));
-                  typedef long long int v1di __attribute__ ((vector_size(8)));
-                  char* pa=(char*)&a;
-                  char* pb=(char*)&b;   
-                  v1di v=__builtin_ia32_psadbw((v8qi){pa[0],pa[1],pa[2],pa[3],0,0,0,0},(v8qi){pb[0],pb[1],pb[2],pb[3],0,0,0,0});
-                  return ((unsigned int*)&v)[0];
-              }
-              """
+                //use GCC SIMD vector instructions
+                extern "C" unsigned int vsadu4(unsigned int a, unsigned int b)
+                {
+                    typedef char v8qi __attribute__ ((vector_size(8)));
+                    typedef long long int v1di __attribute__ ((vector_size(8)));
+                    char* pa=(char*)&a;
+                    char* pb=(char*)&b;
+                    v1di v=__builtin_ia32_psadbw((v8qi){pa[0],pa[1],pa[2],pa[3],0,0,0,0},(v8qi){pb[0],pb[1],pb[2],pb[3],0,0,0,0});
+                    return ((unsigned int*)&v)[0];
+                }
+                """
     code_cuda = """
-              __host__ __device__ $code
-              __global__ void kernel(unsigned int A, unsigned int B, unsigned int* out)
-              {
-                  /* Calculate the global linear index, assuming a 1-d grid. */
-                  int i = blockDim.x * blockIdx.x + threadIdx.x;
-                  if(i==0) out[0] = __vsadu4(A,B); //Use CUDA SIMD Intrinsics. CUDA_VERSION should be above 7050
-                  else if(i==1) out[1] = vsadu4(A,B);
-              }
-              extern "C" void test(unsigned int A, unsigned int B, unsigned int* out)
-              {
-                  unsigned int *d_out;
-                  cudaMalloc(&d_out, 2*sizeof(unsigned int));
-                  kernel<<<1, 2>>>(A, B, d_out);
-                  cudaMemcpy(out, d_out, 2*sizeof(unsigned int), cudaMemcpyDeviceToHost);
-                  cudaFree(d_out);
-                  out[2] = vsadu4(A,B);
-              }
-              """
+                __host__ __device__ $code
+                __global__ void kernel(unsigned int A, unsigned int B, unsigned int* out)
+                {
+                    /* Calculate the global linear index, assuming a 1-d grid. */
+                    int i = blockDim.x * blockIdx.x + threadIdx.x;
+                    if(i==0) out[0] = __vsadu4(A,B); //Use CUDA SIMD Intrinsics. CUDA_VERSION should be above 7050
+                    else if(i==1) out[1] = vsadu4(A,B);
+                }
+                extern "C" void test(unsigned int A, unsigned int B, unsigned int* out)
+                {
+                    unsigned int *d_out;
+                    cudaMalloc(&d_out, 2*sizeof(unsigned int));
+                    kernel<<<1, 2>>>(A, B, d_out);
+                    cudaMemcpy(out, d_out, 2*sizeof(unsigned int), cudaMemcpyDeviceToHost);
+                    cudaFree(d_out);
+                    out[2] = vsadu4(A,B);
+                }
+                """
     hf_cuda, hdll_cuda = cfunc("test", code_cuda; compiler="nvcc")
     hf_norm, hdll_norm = cfunc("vsadu4", code_norm)
     A = rand(UInt32)
@@ -1769,41 +1778,41 @@ function test_julia()
     write(
         main_cpp,
         """
-#include <stdio.h>
-#include <julia.h>
+        #include <stdio.h>
+        #include <julia.h>
 
-//JULIA_DEFINE_FAST_TLS // only define this once, in an executable (not in a shared library) if you want fast code. It should be JULIA_DEFINE_FAST_TLS() before Julia 1.7
+        //JULIA_DEFINE_FAST_TLS // only define this once, in an executable (not in a shared library) if you want fast code. It should be JULIA_DEFINE_FAST_TLS() before Julia 1.7
 
-void call(jl_function_t* sqr1, int* x, int len)
-{
-    jl_value_t* array_type = jl_apply_array_type((jl_value_t*)jl_int32_type, 1);
-    jl_array_t* ax = jl_ptr_to_array_1d(array_type,x,len,0);
-    jl_array_t* ay = (jl_array_t*)jl_call1(sqr1, (jl_value_t*)ax);
-    int* py = (int*)jl_array_data(ay);
-    for(int i=0;i<jl_array_len(ay);++i) printf("%d ",py[i]);
-}
+        void call(jl_function_t* sqr1, int* x, int len)
+        {
+            jl_value_t* array_type = jl_apply_array_type((jl_value_t*)jl_int32_type, 1);
+            jl_array_t* ax = jl_ptr_to_array_1d(array_type,x,len,0);
+            jl_array_t* ay = (jl_array_t*)jl_call1(sqr1, (jl_value_t*)ax);
+            int* py = jl_array_data(ay,int);
+            for(int i=0;i<jl_array_len(ay);++i) printf("%d ",py[i]);
+        }
 
-int main()
-{
-    jl_init();
-    jl_module_t* m = (jl_module_t *)jl_load(jl_main_module,"$(escape_string(embed_jl))");
-    jl_function_t* f = jl_get_function(m, "sqr1");
-    int x[] = {2,4,5};
-    call(f,x,3);
-    jl_atexit_hook(0);
-    return 0;
-}
-"""
+        int main()
+        {
+            jl_init();
+            jl_module_t* m = (jl_module_t *)jl_load(jl_main_module,"$(escape_string(embed_jl))");
+            jl_function_t* f = jl_get_function(m, "sqr1");
+            int x[] = {2,4,5};
+            call(f,x,3);
+            jl_atexit_hook(0);
+            return 0;
+        }
+        """
     )
     write(
         embed_jl,
         """
-module embed
-    function sqr1(x::Array{T,1}) where{T<:Number}
-        return abs2.(x) .+ T(1)
-    end
-end
-"""
+        module embed
+            function sqr1(x::Array{T,1}) where{T<:Number}
+                return abs2.(x) .+ T(1)
+            end
+        end
+        """
     )
     t = cbuild(main_cpp, output_type="exe", julia=true)
     @test readchomp(`$t`) == "5 17 26 "
@@ -1814,33 +1823,31 @@ function test_cxxwrap()
     pkg_dir("CxxWrap") == nothing && error("CxxWrap is not installed")
     ext_cpp = tempname() * ".cpp"
     main_jl = tempname() * ".jl"
-    write(
-        ext_cpp,
+    write(ext_cpp,
         """
-#include "jlcxx/jlcxx.hpp"
-std::string greet()
-{
-   return "hello, world";
-}
-JLCXX_MODULE define_julia_module(jlcxx::Module& mod)
-{
-  mod.method("greet", &greet);
-}
-"""
+        #include "jlcxx/jlcxx.hpp"
+        std::string greet()
+        {
+            return "hello, world";
+        }
+        JLCXX_MODULE define_julia_module(jlcxx::Module& mod)
+        {
+            mod.method("greet", &greet);
+        }
+        """
     )
     t = cbuild(ext_cpp, cxxwrap=true)
-    write(
-        main_jl,
+    write(main_jl,
         """
-module CppHello
-    using CxxWrap
-    @wrapmodule("$t")
-    function __init__()
-        @initcxx
-    end
-end
-println(CppHello.greet())
-"""
+        module CppHello
+            using CxxWrap
+            @wrapmodule(()->"$t")
+            function __init__()
+                @initcxx
+            end
+        end
+        println(CppHello.greet())
+        """
     )
     @test readchomp(`julia $main_jl`) == "hello, world"
     @info "test_cxxwrap passed"
@@ -1855,32 +1862,31 @@ function test_package_compiler()
     t1 = cbuild(tmp1, export_names=["foo"])
 
     tmp2 = joinpath(tmp, "callfoo.jl")
-    write(
-        tmp2,
+    write(tmp2,
         """
- module CallFoo
-     Base.@ccallable callfoo(s::Cchar)::Cchar = ccall((:foo,raw"$t1"),Cchar,(Cchar,),s)
- end
- """
+        module CallFoo
+            Base.@ccallable callfoo(s::Cchar)::Cchar = ccall((:foo,raw"$t1"),Cchar,(Cchar,),s)
+        end
+        """
     )
     t2 = "libcallfoo"
-    ex = """using PackageCompiler;
-          build_shared_lib(raw"$tmp2",raw"$t2",builddir=raw"$tmp",optimize="0",compile="no",init_shared=true)
-          """
+    ex = """
+        using PackageCompiler;
+        build_shared_lib(raw"$tmp2",raw"$t2",builddir=raw"$tmp",optimize="0",compile="no",init_shared=true)
+        """
     run(`julia -e "$ex"`)
     t2 = joinpath(tmp, t2 * (Sys.iswindows() ? ".dll" : ".so"))
 
     tmp3 = joinpath(tmp, "main.cpp")
     open(tmp3, "w") do hf
-        write(
-            hf,
+        write(hf,
             """
-       #include <stdio.h>
-       extern "C" void init_jl_runtime();
-       extern "C" void exit_jl_runtime(int);
-       extern "C" char callfoo(char);
-       int main(){init_jl_runtime();putchar(callfoo('a'));exit_jl_runtime(0);return 0;}
-       """
+            #include <stdio.h>
+            extern "C" void init_jl_runtime();
+            extern "C" void exit_jl_runtime(int);
+            extern "C" char callfoo(char);
+            int main(){init_jl_runtime();putchar(callfoo('a'));exit_jl_runtime(0);return 0;}
+            """
         )
     end
     t3 = cbuild_exe(tmp3, libs=[t2], rpath=true)
